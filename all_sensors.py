@@ -23,10 +23,12 @@ spectator.set_transform(transform)
 for i in range(50): 
     vehicle_bp = random.choice(bp_lib.filter('vehicle')) 
     npc = world.try_spawn_actor(vehicle_bp, random.choice(spawn_points))
-    
+
+
 for v in world.get_actors().filter('*vehicle*'):
     v.set_autopilot(True)
     
+
 # Set initial camera translation
 camera_init_trans = carla.Transform(carla.Location(z=2))
 
@@ -79,8 +81,11 @@ def dvs_callback(data, data_dict):
     
     
 # Initialise parameters and data
-image_w = camera_bp.get_attribute("image_size_x").as_int()
-image_h = camera_bp.get_attribute("image_size_y").as_int()
+
+
+
+image_w = camera_bp.get_attribute("image_size_x").as_int() 
+image_h = camera_bp.get_attribute("image_size_y").as_int() 
 
 
 sensor_data = {'rgb_image': np.zeros((image_h, image_w, 4)),
@@ -136,4 +141,5 @@ cv2.destroyAllWindows()
 
 camera.stop()
 
+time.sleep(40)
 client.reload_world()

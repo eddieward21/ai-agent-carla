@@ -52,12 +52,27 @@ depth_camera_bp.set_attribute('image_size_x', '1280')
 depth_camera_bp.set_attribute('image_size_y', '1024')
 depth_camera = world.spawn_actor(depth_camera_bp, camera_init_trans, attach_to=vehicle)
 
-sensor_data = {
-    'dvs_image': np.zeros((image_h, image_w, 4))
-}
+
 
 # rgb camera
 camera.listen(lambda image: image.save_to_disk('rgb/%06d.png' % image.frame))
+
+"""
+MUST HAVE DJANGO SERVER RUNNING! localhost:8000
+sending POST request to /rgb endpoint for each frame
+"""
+
+import requests
+
+image_data = "(dummy_image_path)"
+url = 'localhost:8000/rgb'
+files = {'image': image_data}
+
+#response = requests.post(url, files=files)
+camera.listen(lambda image: requests.post(url, files={'image': image.frame}))
+
+
+
 
 # semantic segmentation camera
 cc = carla.ColorConverter.CityScapesPalette

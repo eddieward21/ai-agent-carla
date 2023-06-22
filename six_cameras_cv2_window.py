@@ -113,6 +113,36 @@ cv2.imshow("All cameras", tiled)
 cv2.waitKey(1)
 
 camera.listen(lambda image: rgb_callback(image, sensor_data))
+
+"""
+MUST HAVE DJANGO SERVER RUNNING! localhost:8000
+sending POST request to /rgb endpoint for each frame
+
+TESTING CODE!
+def send_image_frame(image_data):
+    files = {'image': image_data}
+
+    response = requests.post(django_server_url, files=files)
+    # Handle the response if needed
+
+camera = ...  # Your camera sensor
+
+# Example usage of camera.listen
+def image_callback(image):
+    image_data = image.raw_data  # Get the raw image data
+
+    send_image_frame(image_data)
+
+camera.listen(image_callback)
+"""
+import requests
+image_data = "(dummy_image_path)"
+url = 'localhost:8000/rgb'
+files = {'image': image_data}
+#response = requests.post(url, files=files)
+camera.listen(lambda image: requests.post(url, files={'image': image.frame}))
+
+
 sem_camera.listen(lambda image: sem_callback(image, sensor_data))
 inst_camera.listen(lambda image: inst_callback(image, sensor_data))
 depth_camera.listen(lambda image: depth_callback(image, sensor_data))

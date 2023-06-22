@@ -29,5 +29,5 @@ camera_init_trans = carla.Transform(carla.Location(z=1.6,x=0.4))
 camera = world.spawn_actor(camera_bp, camera_init_trans, attach_to=vehicle)
 
 camera.listen(lambda image: image.save_to_disk('out/%06d.png' % image.frame))
-
-#camera.stop()
+time.sleep(20)
+camera.stop()
