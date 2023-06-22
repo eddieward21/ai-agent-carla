@@ -62,9 +62,7 @@ opt_camera_bp.set_attribute('image_size_y', '1024')
 opt_camera = world.spawn_actor(opt_camera_bp, camera_init_trans, attach_to=vehicle)
 
 # Define respective callbacks
-def rgb_callback(image, data_dict):
-    data_dict['rgb_image'] = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
-    
+
 def sem_callback(image, data_dict):
     image.convert(carla.ColorConverter.CityScapesPalette)
     data_dict['sem_image'] = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
@@ -112,36 +110,41 @@ tiled = np.concatenate((top_row, lower_row), axis=0)
 cv2.imshow("All cameras", tiled)
 cv2.waitKey(1)
 
-camera.listen(lambda image: rgb_callback(image, sensor_data))
 
 """
 MUST HAVE DJANGO SERVER RUNNING! localhost:8000
 sending POST request to /rgb endpoint for each frame
 
 TESTING CODE!
+"""
+import requests
+
 def send_image_frame(image_data):
     files = {'image': image_data}
+    response = requests.post("http://127.0.0.1:8000/rgb", files=files)
 
-    response = requests.post(django_server_url, files=files)
-    # Handle the response if needed
+def rgb_callback(image, data_dict):
+    """ 
+    response = requests.get('http://127.0.0.1:8000/rgb')
+    csrftoken = response.cookies['csrftoken']
+    headers = {'X-CSRFToken': csrftoken}
+    """
+    image_data = image.raw_data
+    image_frame = image.frame
+    data_dict['rgb_image'] = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
+    send_image_frame(image_frame)#, headers) second parameter if this was working.
 
-camera = ...  # Your camera sensor
+camera.listen(lambda image: rgb_callback(image, sensor_data))
 
-# Example usage of camera.listen
-def image_callback(image):
-    image_data = image.raw_data  # Get the raw image data
-
-    send_image_frame(image_data)
-
-camera.listen(image_callback)
-"""
+""" 
 import requests
 image_data = "(dummy_image_path)"
 url = 'localhost:8000/rgb'
 files = {'image': image_data}
 #response = requests.post(url, files=files)
-camera.listen(lambda image: requests.post(url, files={'image': image.frame}))
-
+camera.listen(lambda image: requests.post(url, files={'image': image.raw_data}))
+"""
+#END TESTING CODE FOR SENDING RGB DATA TO BACKEND
 
 sem_camera.listen(lambda image: sem_callback(image, sensor_data))
 inst_camera.listen(lambda image: inst_callback(image, sensor_data))
