@@ -1,0 +1,1 @@
+## This directory contains rgb sensor image data
