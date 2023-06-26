@@ -175,7 +175,7 @@ while True:
 
             if response.status_code == 201:
                 print('RGB sensor image created successfully')
-                os.remove(image_abs_path)
+                #os.remove(image_abs_path)
             else:
                 print('Failed to create RGB sensor image at ' + image_abs_path)
 
