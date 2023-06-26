@@ -135,6 +135,7 @@ def rgb_callback(image, data_dict):
     image.save_to_disk('data/rgb/' + str(image.frame) + '-' + str(image.timestamp) + '.png')
     image_queue.put('data/rgb/' + str(image.frame) + '-' + str(image.timestamp) + '.png')
     # return normalize rgb data
+    data_dict['rgb_image'] = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
     return i3 / 255.0
 
 camera.listen(lambda image: rgb_callback(image, sensor_data))
