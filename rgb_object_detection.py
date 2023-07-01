@@ -5,18 +5,6 @@ import torch
 
 model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
 
-cap = cv2.VideoCapture(0)
-#cap = cv2.VideoCapture('videos/video1.mp4')
-while cap.isOpened():
-    ret, frame = cap.read()
-    results = model(frame)
-
-    cv2.imshow("YOLO", np.squeeze(results.render()))
-    if cv2.waitKey(10) & 0xFF == ord('q'):
-        break
-cap.release()
-cv2.destroyAllWindows()
-
 import carla 
 import math 
 import random 
@@ -62,29 +50,9 @@ image_h = 1024
 
 sensor_data = {
     'rgb_image': np.zeros((image_h, image_w, 4)),
-    'sem_image': np.zeros((image_h, image_w, 4)),
-    'depth_image': np.zeros((image_h, image_w, 4)),
-    'dvs_image': np.zeros((image_h, image_w, 4)),
-    'opt_image': np.zeros((image_h, image_w, 4)),
-    'inst_image': np.zeros((image_h, image_w, 4))
 }
 
-cv2.namedWindow("All cameras", cv2.WINDOW_AUTOSIZE)
 
-top_row = np.concatenate((sensor_data['rgb_image'], sensor_data['sem_image'], sensor_data['inst_image']), axis=1)
-lower_row = np.concatenate((sensor_data['depth_image'], sensor_data['dvs_image'], sensor_data['opt_image']), axis=1)
-tiled = np.concatenate((top_row, lower_row), axis=0)
-
-cv2.imshow("All cameras", tiled)
-cv2.waitKey(1)
-
-
-"""
-MUST HAVE DJANGO SERVER RUNNING! localhost:8000
-sending POST request to /rgb endpoint for each frame
-
-TESTING CODE!
-"""
 import requests
 import os
 
@@ -95,20 +63,18 @@ def rgb_callback(image, data_dict):
     i = np.array(image.raw_data)
     i2 = i.reshape((image_h, image_w, 4))
     i3 = i2[:,:,:3]
-
+    cap = cv2.VideoCapture()
+    while cap.IsOpened():
+        results = model(sensor_data['rgb_image'])
+        cv2.imshow("All cameras", np.squeeze(results.render()))
+        if cv2.waitKey(1) == ord('q'):
+            break
     data_dict['rgb_image'] = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
     return i3 / 255.0
 
 camera.listen(lambda image: rgb_callback(image, sensor_data))
 
-while True:
-    top_row = np.concatenate((sensor_data['rgb_image'], sensor_data['sem_image'], sensor_data['inst_image']), axis=1)
-    lower_row = np.concatenate((sensor_data['depth_image'], sensor_data['dvs_image'], sensor_data['opt_image']), axis=1)
-    tiled = np.concatenate((top_row, lower_row), axis=0)
 
-    cv2.imshow("All cameras", tiled)
-    if cv2.waitKey(1) == ord('q'):
-        break
 
 camera.stop()
 cv2.destroyAllWindows()
