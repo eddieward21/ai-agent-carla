@@ -1230,14 +1230,15 @@ class CameraManager(object):
             array = np.reshape(array, (image.height, image.width, 4))
             array = array[:, :, :3]
             array = array[:, :, ::-1]
-            self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
             image = Image.fromarray(array.astype('uint8'), 'RGB')
             results = model(image)
-            print(results)
+            print(results.render())
             image_to_show = np.squeeze(results.render())
-            cv2.imshow("Objects", image_to_show)
-            cv2.waitKey(1)
+            image_flipped = np.flip(image_to_show, axis = 0)
+            self.surface = pygame.surfarray.make_surface(np.rot90(image_flipped, k=3))
+
+
 
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
