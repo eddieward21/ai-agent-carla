@@ -25,6 +25,11 @@ from __future__ import print_function
 # -- find carla module ---------------------------------------------------------
 # ==============================================================================
 
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+
 
 import glob
 import os
@@ -145,7 +150,7 @@ class World(object):
         self.collision_sensor = None
         self.lane_invasion_sensor = None
         self.gnss_sensor = None
-        #self.imu_sensor = None
+        self.imu_sensor = None
         self.radar_sensor = None
         self.camera_manager = None
         #self._weather_presets = find_weather_presets()
@@ -442,6 +447,14 @@ class DualControl(object):
 
 class HUD(object):
     def __init__(self, width, height):
+        #FAULTY CODE:
+        self.speed_arr = []
+        self.time_arr = []
+
+        self.brake_arr = []
+        self.steer_arr = []
+
+
         self.dim = (width, height)
         font = pygame.font.Font(pygame.font.get_default_font(), 20)
         font_name = 'courier' if os.name == 'nt' else 'mono'
@@ -465,6 +478,28 @@ class HUD(object):
         self.frame = timestamp.frame
         self.simulation_time = timestamp.elapsed_seconds
 
+    """------------Faulty function below: -------------"""
+    """
+    def real_time_plot(self, x, y):
+        fig, ax = plt.subplots()
+        line, = ax.plot([], [], lw=2)
+        ax.set_xlim(min(x), max(x))
+        ax.set_ylim(min(y), max(y))
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Data')
+
+        def init():
+            line.set_data([], [])
+            return line,
+
+        def update(frame):
+            line.set_data(x[:frame+1], y[:frame+1])
+            return line,
+
+        ani = FuncAnimation(fig, update, frames=len(x), init_func=init, blit=True, interval=100)
+        plt.show()
+    """
+
     def tick(self, world, clock):
         self._notifications.tick(world, clock)
         if not self._show_info:
@@ -477,6 +512,80 @@ class HUD(object):
         heading += 'E' if 179.5 > t.rotation.yaw > 0.5 else ''
         heading += 'W' if -0.5 > t.rotation.yaw > -179.5 else ''
         colhist = world.collision_sensor.get_collision_history()
+
+
+        #faulty code: 
+        #Currently seems to be the number of frames that the ego vehicle is in contact with something
+        total_collisions ={frame: collision for frame,collision in colhist.items() if collision != 0}
+        number_of_collisions = len(total_collisions)
+        #all_lane_invasions = self.lane_invasion_sensor.get_invasions()
+        speed_in_mph = round((3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2)) / 1.609)
+        #self.speed_arr.append(speed_in_mph)
+        #self.time_arr.append(self.simulation_time)
+        #print(f'speed array: {self.speed_arr}, time array: {self.simulation_time}')
+
+
+
+
+        def real_time_plot(x, y):
+            fig, ax = plt.subplots()
+            line, = ax.plot([], [], lw=2)
+            ax.set_xlim(0, 10)  # Set your desired x-axis limits
+            ax.set_ylim(-1, 1)  # Set your desired y-axis limits
+            #ax.set_xlim(min(x), max(x))
+            #ax.set_ylim(min(y), max(y))
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Data')
+
+            def init():
+                line.set_data([], [])
+                return line
+
+            def update(frame):
+                line.set_data(x[:frame+1], y[:frame+1])
+                x.append(self.simulation_time - 50)
+                y.append(self.speed_in_mph)
+                return line
+
+            ani = FuncAnimation(fig, update, frames=len(x), init_func=init, blit=True, interval=100)
+            plt.show()
+
+        def real_time_plot2(x_arr, y_arr):
+            # Enable interactive mode
+            plt.ion()
+
+            # Create the initial plot
+            plt.figure()
+            line, = plt.plot([], [])  # Empty plot
+
+            # Your simulation loop
+            for step in range(50):
+                # Simulate your data (replace this with your actual simulation)
+
+
+                # Update the plot
+                line.set_xdata(x_arr)
+                line.set_ydata(y_arr)
+                plt.pause(0.01)  # Pause for a short time to update the plot
+
+            # Turn off interactive mode
+            plt.ioff()
+
+            # Display the final plot (optional)
+            plt.show()
+
+        def plot_once(x, y, x_label="Time", y_label="Data", title="Time vs Data"):
+            plt.figure(figsize=(8, 6))
+            plt.plot(x, y, marker='o', linestyle='-')
+            plt.xlabel(x_label)
+            plt.ylabel(y_label)
+            plt.title(title)
+            plt.grid(True)
+            plt.show()
+
+        #plot_once(self.time_arr, self.speed_arr)
+        #real_time_plot(self.time_arr, self.speed_arr)
+
         collision = [colhist[x + self.frame - 200] for x in range(0, 200)]
         max_col = max(1.0, max(collision))
         collision = [x / max_col for x in collision]
@@ -504,6 +613,14 @@ class HUD(object):
                 ('Hand brake:', c.hand_brake),
                 ('Manual:', c.manual_gear_shift),
                 'Gear:        %s' % {-1: 'R', 0: 'N'}.get(c.gear, c.gear)]
+            if self.frame % 10 == 0:
+                print(f'Steer: {c.steer}, Brake: {c.brake}, Simulation Time: {datetime.timedelta(seconds=int(self.simulation_time))}, number of collisions: {len(total_collisions)}, speed: {speed_in_mph}, simulation time: {self.simulation_time}, frame: {self.frame}')
+                #real_time_plot(self.speed_arr, self.frame_arr)
+            self.brake_arr.append(c.brake)
+            self.steer_arr.append(c.steer)
+            self.speed_arr.append(speed_in_mph)
+            
+
         elif isinstance(c, carla.WalkerControl):
             self._info_text += [
                 ('Speed:', c.speed, 0.0, 5.556),
@@ -523,6 +640,7 @@ class HUD(object):
                     break
                 vehicle_type = get_actor_display_name(vehicle, truncate=22)
                 self._info_text.append('% 4dm %s' % (d, vehicle_type))
+                print(f'Distance to vehicle: {d}')
 
     def toggle_info(self):
         self._show_info = not self._show_info
@@ -676,6 +794,7 @@ class CollisionSensor(object):
 class LaneInvasionSensor(object):
     def __init__(self, parent_actor, hud):
         self.sensor = None
+        self.invasions = []
         self._parent = parent_actor
         self.hud = hud
         world = self._parent.get_world()
@@ -693,7 +812,21 @@ class LaneInvasionSensor(object):
             return
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
+
+        #Maybe faulty code?
+
         self.hud.notification('Crossed line %s' % ' and '.join(text))
+        self.invasions.append('Crossed line %s' % ' and '.join(text))
+        print(f'Invasions: {self.invasions}, {len(self.invasions)}')
+
+
+    #maybe faulty code.
+    @staticmethod
+    def get_invasions(weak_self):
+        self = weak_self()
+        if not self:
+            return
+        return self.invasions
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -726,7 +859,7 @@ class GnssSensor(object):
 # -- IMUSensor -----------------------------------------------------------------
 # ==============================================================================
 
-"""
+""" 
 class IMUSensor(object):
     def __init__(self, parent_actor):
         self.sensor = None
@@ -759,8 +892,8 @@ class IMUSensor(object):
             max(limits[0], min(limits[1], math.degrees(sensor_data.gyroscope.y))),
             max(limits[0], min(limits[1], math.degrees(sensor_data.gyroscope.z))))
         self.compass = math.degrees(sensor_data.compass)
-"""
 
+"""
 # ==============================================================================
 # -- RadarSensor ---------------------------------------------------------------
 # ==============================================================================
@@ -964,7 +1097,19 @@ def game_loop(args):
         #world = World(sim_world, hud, args.filter)
 
         controller = DualControl(world, args.autopilot)
+        """
+        distance instead of 500? faulty code probably...
+        """
+        #waypoint01 = world.get_waypoint(world.player.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Sidewalk))
 
+        """
+        waypoints = world.map.generate_waypoints(1000)
+        for w in waypoints:
+            world.world.debug.draw_string(w.transform.location, 'O', draw_shadow=False,
+                                            color=carla.Color(r=255, g=0, b=0), life_time=120.0,
+                                            persistent_lines=True)
+            
+        """
         sim_world.wait_for_tick()
 
         clock = pygame.time.Clock()
@@ -983,9 +1128,39 @@ def game_loop(args):
             # prevent destruction of ego vehicle
             #if args.keep_ego_vehicle:
              #   world.player = None
+            #print(hud.test_arr)
+            x_brake = np.linspace(0, len(hud.brake_arr), len(hud.brake_arr))
+            x_speed = np.linspace(0, len(hud.speed_arr), len(hud.speed_arr))
+            x_steer = np.linspace(0, len(hud.steer_arr), len(hud.steer_arr))
+            print(len(x_brake))
+            print(len(x_speed))
+            print(len(x_steer))
+            y_brake = hud.brake_arr
+            y_speed = hud.speed_arr
+            y_steer = hud.steer_arr
+            print(len(y_brake))
+            print(len(y_speed))
+            print(len(y_steer))
+            #fig_brake, ax_brake = plt.subplots()
+            #fig_speed, ax_speed = plt.subplots()
+            #fig_steer, ax_steer = plt.subplots()
+            fig_all, ax_all = plt.subplots(3, sharex=True)
+            #fig_all.suptitle("Braking, Speed, Steering")
+            plt.xlabel("Time")
+            ax_all[0].set_title("Braking")
+            ax_all[1].set_title("Speed")
+            ax_all[2].set_title("Steering")
+            ax_all[0].plot(x_brake, y_brake, linewidth=2.0)
+            ax_all[1].plot(x_speed, y_speed, linewidth=2.0)
+            ax_all[2].plot(x_steer, y_steer, linewidth=2.0)
+            #ax_brake.plot(x_brake, y_brake, linewidth = 2.0)
+            #ax_speed.plot(x_speed, y_speed, linewidth = 2.0)
+            #ax_steer.plot(x_steer, y_steer, linewidth = 2.0)
+            #plt.show()
             world.destroy()
 
         pygame.quit()
+        plt.show()
 
 
 # ==============================================================================
