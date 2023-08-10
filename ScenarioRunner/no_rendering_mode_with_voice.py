@@ -1264,12 +1264,13 @@ class ModuleWorld(object):
 
             
 
-            commandNotActivated = True 
-            if commandNotActivated and (hero_location.x >= pedestrian_potential_x[0] and hero_location.x <= pedestrian_potential_x[1]) and (hero_location.y >= pedestrian_potential_y[0] and hero_location.y >= pedestrian_potential_y[1]):
-                print("-----------------Run Voice Command: this worked--------------------")
-                self.run_voice_command("Pedestrian Detected. Halt.")
-                self.commandNotActivated = False
+            #commandNotActivated = True 
 
+            if self.commandNotActivated and (hero_location.x >= pedestrian_potential_x[0] and hero_location.x <= pedestrian_potential_x[1]) and (hero_location.y >= pedestrian_potential_y[0] and hero_location.y >= pedestrian_potential_y[1]):
+                print("-----------------Run Voice Command: this worked--------------------")
+                self.run_voice_command("Stop Brake Pedestrian Detected.")
+                self.commandNotActivated = False
+                
             """CODE BELOW WORKS: """
             """
             if hero_location.x == blah[0] and hero_location.y == blah[1]:

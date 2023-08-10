@@ -305,8 +305,8 @@ class ScenarioRunner(object):
 
         if self._args.reloadWorld:
 
-            #self.world = self.client.load_world(town)
-            self.world = self.client.load_world("Town12")
+            self.world = self.client.load_world(town)
+            #self.world = self.client.load_world("Town12")
             #self.world.set_weather(preset[0])
 
             self.world.unload_map_layer(carla.MapLayer.Foliage)

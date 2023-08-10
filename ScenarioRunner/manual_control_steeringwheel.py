@@ -20,6 +20,10 @@ To find out the values of your steering wheel use jstest-gtk in Ubuntu.
 
 from __future__ import print_function
 
+from gtts import gTTS
+import pyttsx3
+import threading
+
 
 # ==============================================================================
 # -- find carla module ---------------------------------------------------------
@@ -64,6 +68,7 @@ import math
 import random
 import re
 import weakref
+import csv
 
 if sys.version_info >= (3, 0):
 
@@ -157,9 +162,11 @@ class World(object):
         #self._weather_index = 0
         #self._actor_filter = actor_filter
         self.restart()
+        #self.alter_physics()
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
         self.recording_start = 0
+
 
     def restart(self):
         """
@@ -186,7 +193,6 @@ class World(object):
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player, self.hud)
-        self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
         self.gnss_sensor = GnssSensor(self.player)
         self.camera_manager = CameraManager(self.player, self.hud)
         self.camera_manager.transform_index = cam_pos_index
@@ -194,6 +200,13 @@ class World(object):
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
         """
+
+
+        #self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
+
+
+
+
         if self.restarted:
             return
         self.restarted = True
@@ -239,7 +252,34 @@ class World(object):
         self.hud.notification('Weather: %s' % preset[1])
         self.player.get_world().set_weather(preset[0])
     """
+    def alter_physics(self):
+        front_left_wheel  = carla.WheelPhysicsControl(tire_friction=2.0, damping_rate=1.5, max_steer_angle=70.0, long_stiff_value=1000)
+        front_right_wheel = carla.WheelPhysicsControl(tire_friction=2.0, damping_rate=1.5, max_steer_angle=70.0, long_stiff_value=1000)
+        rear_left_wheel   = carla.WheelPhysicsControl(tire_friction=3.0, damping_rate=1.5, max_steer_angle=0.0,  long_stiff_value=1000)
+        rear_right_wheel  = carla.WheelPhysicsControl(tire_friction=3.0, damping_rate=1.5, max_steer_angle=0.0,  long_stiff_value=1000)
 
+        wheels = [front_left_wheel, front_right_wheel, rear_left_wheel, rear_right_wheel]
+
+        # Change Vehicle Physics Control parameters of the vehicle
+        physics_control = self.player.get_physics_control()
+
+        physics_control.torque_curve = [carla.Vector2D(x=0, y=400), carla.Vector2D(x=1300, y=600)]
+        physics_control.max_rpm = 10000
+        physics_control.moi = 1.0
+        physics_control.damping_rate_full_throttle = 0.0
+        physics_control.use_gear_autobox = True
+        physics_control.gear_switch_time = 0.5
+        physics_control.clutch_strength = 10
+        physics_control.mass = 10000
+        physics_control.drag_coefficient = 0.25
+        physics_control.steering_curve = [carla.Vector2D(x=0, y=1), carla.Vector2D(x=100, y=1), carla.Vector2D(x=300, y=1)]
+        physics_control.use_sweep_wheel_collision = True
+        physics_control.wheels = wheels
+
+        # Apply Vehicle Physics Control for the vehicle
+        self.player.apply_physics_control(physics_control)
+        print(physics_control)
+    
     def tick(self, clock):
         #self.hud.tick(self, clock)
         if len(self.world.get_actors().filter(self.player_name)) < 1:
@@ -450,6 +490,12 @@ class HUD(object):
         #FAULTY CODE:
         self.speed_arr = []
         self.time_arr = []
+        self.frame_arr = []
+        self.lane_invasions = []
+        self.num_lane_invasions = 0
+        self.total_collisions = []
+
+        self.seenActors = set()
 
         self.brake_arr = []
         self.steer_arr = []
@@ -500,6 +546,17 @@ class HUD(object):
         plt.show()
     """
 
+    def run_voice_command(self,object, distanceToObject, seenObjectsSet):
+        text = "Stop! Brake! Pedestrian detected"
+        engine = pyttsx3.init()
+
+        if distanceToObject < 20 and object not in seenObjectsSet:
+            seenObjectsSet.add(object)
+            engine.say(text)
+        engine.runAndWait()
+
+
+
     def tick(self, world, clock):
         self._notifications.tick(world, clock)
         if not self._show_info:
@@ -516,75 +573,22 @@ class HUD(object):
 
         #faulty code: 
         #Currently seems to be the number of frames that the ego vehicle is in contact with something
-        total_collisions ={frame: collision for frame,collision in colhist.items() if collision != 0}
-        number_of_collisions = len(total_collisions)
-        #all_lane_invasions = self.lane_invasion_sensor.get_invasions()
+        #self.total_collisions = [collision for frame,collision in colhist.items() if collision != 0]
+        number_of_collisions = len(self.total_collisions)
+
+        #weak_self = weakref.ref(self)
+        #num_lane_invasions = len(LaneInvasionSensor.get_invasions(weak_self))
+
+        self.num_lane_invasions = len(world.lane_invasion_sensor.invasions)
+
+        self.lane_invasions = world.lane_invasion_sensor.invasions
+
         speed_in_mph = round((3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2)) / 1.609)
         #self.speed_arr.append(speed_in_mph)
-        #self.time_arr.append(self.simulation_time)
+        self.time_arr.append(self.simulation_time - 47)
         #print(f'speed array: {self.speed_arr}, time array: {self.simulation_time}')
 
 
-
-
-        def real_time_plot(x, y):
-            fig, ax = plt.subplots()
-            line, = ax.plot([], [], lw=2)
-            ax.set_xlim(0, 10)  # Set your desired x-axis limits
-            ax.set_ylim(-1, 1)  # Set your desired y-axis limits
-            #ax.set_xlim(min(x), max(x))
-            #ax.set_ylim(min(y), max(y))
-            ax.set_xlabel('Time')
-            ax.set_ylabel('Data')
-
-            def init():
-                line.set_data([], [])
-                return line
-
-            def update(frame):
-                line.set_data(x[:frame+1], y[:frame+1])
-                x.append(self.simulation_time - 50)
-                y.append(self.speed_in_mph)
-                return line
-
-            ani = FuncAnimation(fig, update, frames=len(x), init_func=init, blit=True, interval=100)
-            plt.show()
-
-        def real_time_plot2(x_arr, y_arr):
-            # Enable interactive mode
-            plt.ion()
-
-            # Create the initial plot
-            plt.figure()
-            line, = plt.plot([], [])  # Empty plot
-
-            # Your simulation loop
-            for step in range(50):
-                # Simulate your data (replace this with your actual simulation)
-
-
-                # Update the plot
-                line.set_xdata(x_arr)
-                line.set_ydata(y_arr)
-                plt.pause(0.01)  # Pause for a short time to update the plot
-
-            # Turn off interactive mode
-            plt.ioff()
-
-            # Display the final plot (optional)
-            plt.show()
-
-        def plot_once(x, y, x_label="Time", y_label="Data", title="Time vs Data"):
-            plt.figure(figsize=(8, 6))
-            plt.plot(x, y, marker='o', linestyle='-')
-            plt.xlabel(x_label)
-            plt.ylabel(y_label)
-            plt.title(title)
-            plt.grid(True)
-            plt.show()
-
-        #plot_once(self.time_arr, self.speed_arr)
-        #real_time_plot(self.time_arr, self.speed_arr)
 
         collision = [colhist[x + self.frame - 200] for x in range(0, 200)]
         max_col = max(1.0, max(collision))
@@ -614,12 +618,20 @@ class HUD(object):
                 ('Manual:', c.manual_gear_shift),
                 'Gear:        %s' % {-1: 'R', 0: 'N'}.get(c.gear, c.gear)]
             if self.frame % 10 == 0:
-                print(f'Steer: {c.steer}, Brake: {c.brake}, Simulation Time: {datetime.timedelta(seconds=int(self.simulation_time))}, number of collisions: {len(total_collisions)}, speed: {speed_in_mph}, simulation time: {self.simulation_time}, frame: {self.frame}')
+                #print(f'Steer: {c.steer}, Brake: {c.brake}, Simulation Time: {datetime.timedelta(seconds=int(self.simulation_time))}, number of collisions: {len(self.total_collisions)}, speed: {speed_in_mph}, simulation time: {self.simulation_time}, frame: {self.frame}, total collisions: {self.total_collisions}')
                 #real_time_plot(self.speed_arr, self.frame_arr)
+                frame_counter = 0
+                self.frame_arr.append(frame_counter)
+                frame_counter += 1
+            self.lane_invasions.append(0)
+
+            world.collision_sensor.collisions_arr.append(0)
+
             self.brake_arr.append(c.brake)
             self.steer_arr.append(c.steer)
             self.speed_arr.append(speed_in_mph)
-            
+            self.total_collisions = [collision for frame,collision in colhist.items()]
+            #self.total_collisions.append(collision)
 
         elif isinstance(c, carla.WalkerControl):
             self._info_text += [
@@ -640,7 +652,12 @@ class HUD(object):
                     break
                 vehicle_type = get_actor_display_name(vehicle, truncate=22)
                 self._info_text.append('% 4dm %s' % (d, vehicle_type))
-                print(f'Distance to vehicle: {d}')
+                #print(f'Distance to vehicle: {d}')
+                """
+                    threading.Thread(
+                    target =self.run_voice_command(vehicle_type, d, self.seenActors),
+                    daemon=True).start()
+                """
 
     def toggle_info(self):
         self._show_info = not self._show_info
@@ -754,7 +771,9 @@ class HelpText(object):
 
 class CollisionSensor(object):
     def __init__(self, parent_actor, hud):
+        self.seenActorSet = set()
         self.sensor = None
+        self.collisions_arr = []
         self.history = []
         self._parent = parent_actor
         self.hud = hud
@@ -777,15 +796,28 @@ class CollisionSensor(object):
         self = weak_self()
         if not self:
             return
+        engine = pyttsx3.init()
         actor_type = get_actor_display_name(event.other_actor)
+        """ 
+        if actor_type not in self.seenActorSet:
+            self.seenActorSet.add(actor_type)
+            engine.say("You collided with a " + str(actor_type))
+        engine.runAndWait()
+        """
+        print(self.seenActorSet)
+
         self.hud.notification('Collision with %r' % actor_type)
+
+
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
+
+        self.collisions_arr.append(intensity)
+
         if len(self.history) > 4000:
             self.history.pop(0)
-
-
+            
 # ==============================================================================
 # -- LaneInvasionSensor --------------------------------------------------------
 # ==============================================================================
@@ -816,8 +848,9 @@ class LaneInvasionSensor(object):
         #Maybe faulty code?
 
         self.hud.notification('Crossed line %s' % ' and '.join(text))
-        self.invasions.append('Crossed line %s' % ' and '.join(text))
-        print(f'Invasions: {self.invasions}, {len(self.invasions)}')
+        self.invasions.append(1) # carla.LaneType.Sidewalk
+
+        #print(f'Invasions: {self.invasions}, {len(self.invasions)}')
 
 
     #maybe faulty code.
@@ -1129,34 +1162,66 @@ def game_loop(args):
             #if args.keep_ego_vehicle:
              #   world.player = None
             #print(hud.test_arr)
-            x_brake = np.linspace(0, len(hud.brake_arr), len(hud.brake_arr))
-            x_speed = np.linspace(0, len(hud.speed_arr), len(hud.speed_arr))
-            x_steer = np.linspace(0, len(hud.steer_arr), len(hud.steer_arr))
-            print(len(x_brake))
-            print(len(x_speed))
-            print(len(x_steer))
+            
+            delta_time = np.diff(np.linspace(0, len(hud.brake_arr), len(hud.brake_arr)))
+            delta_steering_angle = np.diff(hud.brake_arr)
+            derivative_steering_angle = delta_steering_angle / delta_time
+            time_midpoints = np.array(np.linspace(0, len(hud.brake_arr), len(hud.brake_arr))[:-1]) + np.diff(np.linspace(0, len(hud.brake_arr), len(hud.brake_arr))) / 2
+
+            num_frames = np.linspace(0, len(hud.brake_arr), len(hud.brake_arr))
+            #x_speed = np.linspace(0, len(hud.speed_arr), len(hud.speed_arr))
+            #x_steer = np.linspace(0, len(hud.steer_arr), len(hud.steer_arr))
+            
             y_brake = hud.brake_arr
             y_speed = hud.speed_arr
             y_steer = hud.steer_arr
-            print(len(y_brake))
-            print(len(y_speed))
-            print(len(y_steer))
-            #fig_brake, ax_brake = plt.subplots()
-            #fig_speed, ax_speed = plt.subplots()
-            #fig_steer, ax_steer = plt.subplots()
-            fig_all, ax_all = plt.subplots(3, sharex=True)
-            #fig_all.suptitle("Braking, Speed, Steering")
-            plt.xlabel("Time")
+
+
+            fig_all, ax_all = plt.subplots(5, sharex=True)
+
+            plt.xlabel("Frames In Simulation")
             ax_all[0].set_title("Braking")
             ax_all[1].set_title("Speed")
-            ax_all[2].set_title("Steering")
-            ax_all[0].plot(x_brake, y_brake, linewidth=2.0)
-            ax_all[1].plot(x_speed, y_speed, linewidth=2.0)
-            ax_all[2].plot(x_steer, y_steer, linewidth=2.0)
-            #ax_brake.plot(x_brake, y_brake, linewidth = 2.0)
-            #ax_speed.plot(x_speed, y_speed, linewidth = 2.0)
-            #ax_steer.plot(x_steer, y_steer, linewidth = 2.0)
-            #plt.show()
+            ax_all[2].set_title("Steering")            
+            ax_all[3].set_title("Collisions")
+            ax_all[4].set_title("Lane Invasions")
+            
+            ax_all[0].plot(num_frames, y_brake, linewidth=2.0)
+            ax_all[1].plot(num_frames, y_speed, linewidth=2.0)
+            ax_all[2].plot(num_frames, y_steer, linewidth=2.0)
+
+            c = world.collision_sensor.collisions_arr
+            #c = world.collision_sensor.collisions_arr 
+            #print(c)
+            #colhist = [value for key, value in c.items()]
+            #print(colhist)
+            #print(f'laneInvasions Length : {len(hud.lane_invasions)} colhist length: {len(colhist)}')
+
+            x_collisions = np.linspace(0, len(c), len(c))
+            ax_all[3].plot(x_collisions, c, linewidth=2.0)
+
+            x_invasions = np.linspace(0, len(hud.lane_invasions), len(hud.lane_invasions))
+            ax_all[4].plot(x_invasions, hud.lane_invasions, linewidth=2.0)
+
+            
+            def save_arrays_to_csv(arr1, arr2, arr3, arr4, arr5, file_name):
+                now = datetime.datetime.now()
+                dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+
+                if not file_name.endswith('.csv'):
+                    file_name += '.csv'
+
+                with open(file_name, mode='a', newline='') as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow([arr1,arr2, arr3, arr4, arr5, dt_string])
+
+                print(f"Data saved to '{file_name}' in the same directory at {dt_string}")
+            
+            save_arrays_to_csv(y_brake, y_speed, y_steer, c, hud.lane_invasions, 'agent_data.csv')
+            #plt.plot(time_midpoints, derivative_steering_angle, label='Change in Steering Angle')
+
+
+
             world.destroy()
 
         pygame.quit()
